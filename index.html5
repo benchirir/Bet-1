@@ -1,0 +1,123 @@
+const crypto = require('crypto');
+
+const WHEEL_NUMBERS = [
+  0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 
+  24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
+];
+
+const RED_NUMBERS = new Set([32, 19, 21, 25, 34, 27, 36, 30, 23, 5, 16, 1, 14, 9, 18, 7, 12, 3]);
+
+class GameEngine {
+  static getNumberColor(number) {
+    if (number === 0) return 'green';
+    return RED_NUMBERS.has(number) ? 'red' : 'black';
+  }
+
+  static generateWinningNumber(serverSeed, clientSeed, nonce) {
+    const hmac = crypto.createHmac('sha256', serverSeed);
+    hmac.update(`${clientSeed}:${nonce}`);
+    const hash = hmac.digest('hex');
+    
+    const randomValue = parseInt(hash.substring(0, 8), 16);
+    const index = randomValue % WHEEL_NUMBERS.length;
+    
+    return WHEEL_NUMBERS[index];
+  }
+
+  static calculatePayout(bets, winningNumber) {
+    const winColor = this.getNumberColor(winningNumber);
+    const isEven = winningNumber !== 0 && winningNumber % 2 === 0;
+    const dozen = winningNumber === 0 ? null : Math.ceil(winningNumber / 12);
+    
+    let totalPayout = 0;
+    const betResults = [];
+    
+    for (const bet of bets) {
+      let multiplier = 0;
+      let isWin = false;
+      
+      switch (bet.betType) {
+        case 'straight':
+          if (parseInt(bet.betValue) === winningNumber) {
+            multiplier = 35;
+            isWin = true;
+          }
+          break;
+          
+        case 'red':
+          if (winColor === 'red') {
+            multiplier = 1;
+            isWin = true;
+          }
+          break;
+          
+        case 'black':
+          if (winColor === 'black') {
+            multiplier = 1;
+            isWin = true;
+          }
+          break;
+          
+        case 'even':
+          if (isEven) {
+            multiplier = 1;
+            isWin = true;
+          }
+          break;
+          
+        case 'odd':
+          if (!isEven && winningNumber !== 0) {
+            multiplier = 1;
+            isWin = true;
+          }
+          break;
+          
+        case 'dozen':
+          if (winningNumber !== 0 && parseInt(bet.betValue) === dozen) {
+            multiplier = 2;
+            isWin = true;
+          }
+          break;
+      }
+      
+      const payout = isWin ? bet.amount * (multiplier + 1) : 0;
+      totalPayout += payout;
+      
+      betResults.push({
+        ...bet,
+        isWin,
+        multiplier,
+        payout
+      });
+    }
+    
+    return {
+      totalPayout,
+      betResults,
+      winningNumber,
+      color: winColor
+    };
+  }
+
+  static validateBets(bets, totalBalance) {
+    const totalBetAmount = bets.reduce((sum, bet) => sum + bet.amount, 0);
+    
+    if (totalBetAmount <= 0) {
+      throw new Error('Invalid bet amount');
+    }
+    
+    if (totalBetAmount > totalBalance) {
+      throw new Error('Insufficient balance');
+    }
+    
+    for (const bet of bets) {
+      if (bet.amount < 1) {
+        throw new Error('Minimum bet is 1');
+      }
+    }
+    
+    return totalBetAmount;
+  }
+}
+
+module.exports = GameEngine;
