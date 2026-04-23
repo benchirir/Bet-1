@@ -1,0 +1,106 @@
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+
+const dbPath = path.join(__dirname, 'roulette.db');
+let db = null;
+
+const initializeDatabase = () => {
+  return new Promise((resolve, reject) => {
+    db = new sqlite3.Database(dbPath, (err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      console.log('📁 Connected to SQLite database');
+      
+      db.run('PRAGMA foreign_keys = ON');
+      
+      db.serialize(() => {
+        // Players table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS players (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            balance REAL DEFAULT 1000.00,
+            total_wagered REAL DEFAULT 0,
+            total_won REAL DEFAULT 0,
+            games_played INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_login DATETIME
+          )
+        `);
+
+        // Games table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS games (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_uuid TEXT UNIQUE NOT NULL,
+            player_id INTEGER NOT NULL,
+            bet_amount REAL NOT NULL,
+            win_amount REAL DEFAULT 0,
+            winning_number INTEGER,
+            server_seed_hash TEXT NOT NULL,
+            client_seed TEXT NOT NULL,
+            nonce INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME,
+            FOREIGN KEY (player_id) REFERENCES players (id)
+          )
+        `);
+
+        // Bets table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS bets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_id INTEGER NOT NULL,
+            bet_type TEXT NOT NULL,
+            bet_value TEXT,
+            amount REAL NOT NULL,
+            is_win BOOLEAN DEFAULT 0,
+            payout REAL DEFAULT 0,
+            FOREIGN KEY (game_id) REFERENCES games (id)
+          )
+        `);
+
+        // Server seeds table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS server_seeds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seed_hash TEXT UNIQUE NOT NULL,
+            seed_plain TEXT NOT NULL,
+            revealed BOOLEAN DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        // Create default server seed if none exists
+        db.get('SELECT COUNT(*) as count FROM server_seeds', (err, row) => {
+          if (!err && row.count === 0) {
+            const crypto = require('crypto');
+            const plainSeed = crypto.randomBytes(32).toString('hex');
+            const hash = crypto.createHash('sha256').update(plainSeed).digest('hex');
+            
+            db.run(
+              'INSERT INTO server_seeds (seed_hash, seed_plain) VALUES (?, ?)',
+              [hash, plainSeed]
+            );
+            console.log('🔐 Default server seed created');
+          }
+        });
+      });
+
+      resolve();
+    });
+  });
+};
+
+const getDb = () => {
+  if (!db) {
+    throw new Error('Database not initialized');
+  }
+  return db;
+};
+
+module.exports = { initializeDatabase, getDb };
