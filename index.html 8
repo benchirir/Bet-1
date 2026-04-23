@@ -1,0 +1,68 @@
+class RouletteAPI {
+    constructor() {
+        this.baseURL = '';
+    }
+
+    async request(endpoint, options = {}) {
+        const response = await fetch(`${this.baseURL}/api${endpoint}`, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Request failed');
+        }
+        
+        return data;
+    }
+
+    async register(username, password) {
+        return this.request('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
+    }
+
+    async login(username, password) {
+        return this.request('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
+    }
+
+    async logout() {
+        return this.request('/auth/logout', {
+            method: 'POST'
+        });
+    }
+
+    async getUser() {
+        return this.request('/user');
+    }
+
+    async getBalance() {
+        return this.request('/balance');
+    }
+
+    async spin(bets, clientSeed = null) {
+        return this.request('/spin', {
+            method: 'POST',
+            body: JSON.stringify({ bets, clientSeed })
+        });
+    }
+
+    async getHistory() {
+        return this.request('/history');
+    }
+
+    async getStats() {
+        return this.request('/stats');
+    }
+}
+
+const api = new RouletteAPI();
