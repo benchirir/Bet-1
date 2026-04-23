@@ -1,0 +1,96 @@
+const { getDb } = require('../database/db');
+const { v4: uuidv4 } = require('uuid');
+
+class Game {
+  static async create({ playerId, betAmount, serverSeedHash, clientSeed, nonce }) {
+    const db = getDb();
+    const gameUuid = uuidv4();
+    
+    return new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO games (game_uuid, player_id, bet_amount, server_seed_hash, client_seed, nonce, status) 
+         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+        [gameUuid, playerId, betAmount, serverSeedHash, clientSeed, nonce],
+        function(err) {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve({
+            id: this.lastID,
+            gameUuid,
+            playerId,
+            betAmount
+          });
+        }
+      );
+    });
+  }
+
+  static async complete(gameId, winningNumber, winAmount) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE games 
+         SET winning_number = ?,
+             win_amount = ?,
+             status = 'completed',
+             completed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [winningNumber, winAmount, gameId],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  static async addBet(gameId, betType, betValue, amount) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO bets (game_id, bet_type, bet_value, amount) VALUES (?, ?, ?, ?)',
+        [gameId, betType, betValue, amount],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        }
+      );
+    });
+  }
+
+  static async updateBetResult(betId, isWin, payout) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE bets SET is_win = ?, payout = ? WHERE id = ?',
+        [isWin ? 1 : 0, payout, betId],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  static async getPlayerHistory(playerId, limit = 20) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.all(
+        `SELECT game_uuid, bet_amount, win_amount, winning_number, created_at 
+         FROM games 
+         WHERE player_id = ? AND status = 'completed'
+         ORDER BY created_at DESC 
+         LIMIT ?`,
+        [playerId, limit],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        }
+      );
+    });
+  }
+}
+
+module.exports = Game;
