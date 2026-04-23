@@ -1,0 +1,93 @@
+const { getDb } = require('../database/db');
+const bcrypt = require('bcrypt');
+
+class Player {
+  static async create({ username, password }) {
+    const db = getDb();
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    return new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO players (username, password_hash, balance) VALUES (?, ?, 1000.00)',
+        [username, passwordHash],
+        function(err) {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve({
+            id: this.lastID,
+            username,
+            balance: 1000.00
+          });
+        }
+      );
+    });
+  }
+
+  static async findByUsername(username) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT * FROM players WHERE username = ?',
+        [username],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+  }
+
+  static async findById(id) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT id, username, balance, total_wagered, total_won, games_played, created_at FROM players WHERE id = ?',
+        [id],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+  }
+
+  static async updateBalance(playerId, newBalance) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE players SET balance = ? WHERE id = ?',
+        [newBalance, playerId],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  static async updateStats(playerId, wageredDelta, wonDelta) {
+    const db = getDb();
+    return new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE players 
+         SET total_wagered = total_wagered + ?,
+             total_won = total_won + ?,
+             games_played = games_played + 1
+         WHERE id = ?`,
+        [wageredDelta, wonDelta, playerId],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  static async validatePassword(player, password) {
+    return bcrypt.compare(password, player.password_hash);
+  }
+}
+
+module.exports = Player;
